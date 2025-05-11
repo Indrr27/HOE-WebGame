@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1">
+    <title>hoe.love</title>
+    <link rel="stylesheet" type="text/css" href="theme/love.css">
+  </head>
+  <body>
+    
+    <canvas id="walkerCanvas" width="660" height="500"></canvas>
+    <div class="game-frame">
+      <canvas id="loadingCanvas" width="640" height="480" oncontextmenu="event.preventDefault()"></canvas>
+      <canvas id="canvas" width="640" height="480" oncontextmenu="event.preventDefault()"></canvas>
+    </div>
+
+    <script>
+      const walkerCanvas = document.getElementById("walkerCanvas");
+      const ctx = walkerCanvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+
+      const frameWidth = 64, frameHeight = 64, frameDelay = 100;
+      const walkFrames = [], idleFrames = [];
+      const walkFrameCount = 9, idleFrameCount = 4;
+
+      let currentFrame = 0, currentIdleFrame = 0;
+      let posX = 0, direction = 1;
+      let lastFrameTime = 0;
+      let isIdle = false, idleStartTime = 0, idleDuration = 0;
+      let lastIdleAtEdge = null;
+      let loaded = 0;
+
+      function resizeWalkerCanvas() {
+        const imageAspect = 320 / 240;
+        const winAspect = window.innerWidth / window.innerHeight;
+        let newWidth, newHeight;
+        if (winAspect > imageAspect) {
+          newHeight = window.innerHeight;
+          newWidth = newHeight * imageAspect;
+        } else {
+          newWidth = window.innerWidth;
+          newHeight = newWidth / imageAspect;
+        }
+        walkerCanvas.style.width = `${newWidth}px`;
+        walkerCanvas.style.height = `${newHeight}px`;
+        walkerCanvas.style.left = `${(window.innerWidth - newWidth) / 2}px`;
+        walkerCanvas.style.top = `${(window.innerHeight - newHeight) / 2}px`;
+      }
+
+      function maybeIdle(timestamp) {
+        if (lastIdleAtEdge === direction) return;
+        const shouldIdle = Math.random() < 0.4;
+        if (shouldIdle) {
+          isIdle = true;
+          idleStartTime = timestamp;
+          idleDuration = 3000 + Math.random() * 2000; // 3 to 5 seconds
+
+          currentIdleFrame = 0;
+          lastIdleAtEdge = direction;
+        } else {
+          lastIdleAtEdge = null;
+        }
+      }
+
+      function loop(timestamp) {
+        if (!lastFrameTime) lastFrameTime = timestamp;
+        const elapsed = timestamp - lastFrameTime;
+        const rect = walkerCanvas.getBoundingClientRect();
+        walkerCanvas.width = rect.width;
+        walkerCanvas.height = rect.height;
+
+        ctx.clearRect(0, 0, walkerCanvas.width, walkerCanvas.height);
+
+        const scaleFactor = 3.5;
+        const baseSize = walkerCanvas.height / 10;
+        const drawHeight = frameHeight * (baseSize / frameHeight) * scaleFactor;
+        const drawWidth = frameWidth * (baseSize / frameHeight) * scaleFactor;
+        const yOffset = walkerCanvas.height * 0.08;
+        const yPos = walkerCanvas.height - drawHeight - yOffset;
+
+        if (isIdle) {
+          if (timestamp - idleStartTime > idleDuration) {
+            isIdle = false;
+            lastFrameTime = timestamp;
+          } else {
+            if (elapsed > 1000) {
+              currentIdleFrame = (currentIdleFrame + 1) % idleFrameCount;
+              lastFrameTime = timestamp;
+            }
+            const frame = idleFrames[currentIdleFrame];
+            ctx.drawImage(frame, posX, yPos, drawWidth, drawHeight);
+            requestAnimationFrame(loop);
+            return;
+          }
+        }
+
+        if (elapsed > frameDelay) {
+          currentFrame = (currentFrame + 1) % walkFrameCount;
+          lastFrameTime = timestamp;
+        }
+
+        const frame = walkFrames[currentFrame];
+        ctx.save();
+        if (direction === -1) {
+          ctx.translate(posX + drawWidth, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(frame, 0, yPos, drawWidth, drawHeight);
+        } else {
+          ctx.drawImage(frame, posX, yPos, drawWidth, drawHeight);
+        }
+        ctx.restore();
+
+        const walkSpeed = drawWidth * 0.005;
+        posX += walkSpeed * direction;
+
+        if (direction === 1 && posX + drawWidth >= walkerCanvas.width) {
+          direction = -1;
+          maybeIdle(timestamp);
+        } else if (direction === -1 && posX <= 0) {
+          direction = 1;
+          maybeIdle(timestamp);
+        }
+
+        requestAnimationFrame(loop);
+      }
+
+      for (let i = 1; i <= walkFrameCount; i++) {
+        const img = new Image();
+        img.src = `theme/gal1sideways${i}.png`;
+        img.onload = () => {
+          loaded++;
+          if (loaded === walkFrameCount + idleFrameCount) {
+            resizeWalkerCanvas();
+            requestAnimationFrame(loop);
+          }
+        };
+        walkFrames.push(img);
+      }
+
+      for (let i = 1; i <= idleFrameCount; i++) {
+        const img = new Image();
+        img.src = `theme/gal1idle${i}.png`;
+        img.onload = () => {
+          loaded++;
+          if (loaded === walkFrameCount + idleFrameCount) {
+            resizeWalkerCanvas();
+            requestAnimationFrame(loop);
+          }
+        };
+        idleFrames.push(img);
+      }
+
+      window.addEventListener("resize", resizeWalkerCanvas);
+    </script>
+
+    <script>
+      function goFullScreen() {
+        var canvas = document.getElementById("canvas");
+        if (canvas.requestFullscreen) canvas.requestFullscreen();
+        else if (canvas.webkitRequestFullscreen) canvas.webkitRequestFullscreen();
+        else if (canvas.mozRequestFullScreen) canvas.mozRequestFullScreen();
+      }
+
+      function FullScreenHook() {
+        var canvas = document.getElementById("canvas");
+        canvas.width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+        canvas.height = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+      }
+
+      var loadingContext = document.getElementById('loadingCanvas').getContext('2d');
+      function drawLoadingText(text) {
+        var canvas = loadingContext.canvas;
+        loadingContext.fillStyle = "rgb(142, 195, 227)";
+        loadingContext.fillRect(0, 0, canvas.scrollWidth, canvas.scrollHeight);
+        loadingContext.font = '2em arial';
+        loadingContext.textAlign = 'center';
+        loadingContext.fillStyle = "rgb(11, 86, 117)";
+        loadingContext.fillText(text, canvas.scrollWidth / 2, canvas.scrollHeight / 2);
+        loadingContext.fillText("Powered By Emscripten.", canvas.scrollWidth / 2, canvas.scrollHeight / 4);
+        loadingContext.fillText("Powered By LÖVE.", canvas.scrollWidth / 2, (canvas.scrollHeight / 4) * 3);
+      }
+
+      window.onload = function () { window.focus(); };
+      window.onclick = function () { window.focus(); };
+      window.addEventListener("keydown", function(e) {
+        if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) e.preventDefault();
+      }, false);
+
+      var Module = {
+        arguments: ["./game.love"],
+        INITIAL_MEMORY: 16777216,
+        printErr: console.error.bind(console),
+        canvas: (function () {
+          var canvas = document.getElementById('canvas');
+          canvas.addEventListener("webglcontextlost", function(e) {
+            alert('WebGL context lost. You will need to reload the page.');
+            e.preventDefault();
+          }, false);
+          return canvas;
+        })(),
+        setStatus: function (text) {
+          if (text) {
+            drawLoadingText(text);
+          } else if (Module.remainingDependencies === 0) {
+            document.getElementById('loadingCanvas').style.display = 'none';
+            document.getElementById('canvas').style.visibility = 'visible';
+          }
+        },
+        totalDependencies: 0,
+        remainingDependencies: 0,
+        monitorRunDependencies: function (left) {
+          this.remainingDependencies = left;
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        }
+      };
+      Module.setStatus('Downloading...');
+      window.onerror = function(event) {
+        Module.setStatus('Exception thrown, see JavaScript console');
+        Module.setStatus = function(text) {
+          if (text) Module.printErr('[post-exception status] ' + text);
+        };
+      };
+
+      var applicationLoad = function(e) {
+        Love(Module);
+      }
+    </script>
+
+    <script type="text/javascript" src="game.js"></script>
+    <script async type="text/javascript" src="love.js" onload="applicationLoad(this)"></script>
+  </body>
+</html>
